@@ -1,96 +1,89 @@
-# shvirtd-example-python
+# Домашнее задание к занятию 5. «Практическое применение Docker» - Элдияр Акматов
 
-Учебный проект FastAPI-приложения для изучения Docker Compose.
+[Ссылка на GitHub репозиторий](https://github.com/eldyear/shvirtd-example-python)
 
-## Описание проекта
+Задача 3: Проверка работы базы данных (SQL-запрос) и файл [compose.yaml](compose.yaml)
+Команда подключения к MySQL:
 
-Это простое веб-приложение на FastAPI, предназначенное для изучения контейнеризации и работы с Docker Compose. Приложение демонстрирует:
 
-- Создание веб-сервиса на FastAPI
-- Подключение к базе данных MySQL
-- Работу с прокси-серверами (Nginx → HAProxy → FastAPI)
-- Корректную настройку сетей Docker
-- Передачу IP-адресов через заголовки прокси
-
-### Функциональность
-
-При обращении к главной странице приложение:
-1. Определяет IP-адрес клиента
-2. Записывает время запроса и IP-адрес в базу данных MySQL
-3. Возвращает эту информацию пользователю
-
-**Важно для обучения:** Если обращаться к приложению напрямую (минуя прокси), вы получите подсказку о неправильном выполнении задания.
-
-## Способы запуска
-
-### 1. Запуск через Docker Compose
-
-**Архитектура при запуске через Docker Compose:**
-```
-Клиент → Nginx (8090) → HAProxy (8080) → FastAPI App (5000) → MySQL
 ```
 
-### 2. Локальный запуск для разработки
+docker exec -ti app-db-1 mysql -uroot -pPassword
 
+```
+
+SQL-запросы:
+
+```
+
+show databases;
+
+use virtd;
+
+show tables;
+
+SELECT * from requests LIMIT 10;
+
+```
+
+![img](img/scrn1.png)
+
+Задача 4: Проверка на сервере Yandex Cloud
+• Проверка через check-host: по цепочке `Пользователь → Internet → Nginx → HAProxy → FastAPI (запись в БД)`.
+
+![img](img/scrn2.png)
+![img](img/scrn5.png)
+
+"Отобразите список контекстов и результат удаленного выполнения docker ps -a". Замучился с этим но Docker никак не захотел выролнить команду `docker --context remote-vm ps -a` выдавая одну и ту же ошибку 
 ```bash
-# Создайте виртуальное окружение
-python3 -m venv venv
-source venv/bin/activate  # в Windows: venv\Scripts\activate
+Cannot connect to the Docker daemon at http://docker.example.com. Is the docker daemon running?
+```
+Так как это "Необязательная часть" решил оставить на потом но вывел с помошью команды `ssh eldyear@93.77.180.248 "sudo docker ps -a"` хотя это не правильно. (так утешился)
 
-# Установите зависимости
-pip install -r requirements.txt
+![img](img/scrn7.png)
 
-# Настройте переменные окружения для подключения к БД(не забудьте отдельно запустить БД)
-export DB_HOST='127.0.0.1'
-export DB_USER='app'  
-export DB_PASSWORD='very_strong'
-export DB_NAME='example'
+Задача 5: Автоматическое резервное копирование (/opt/backup)
+• Скрипт бэкапа (/opt/backup.sh):
 
-# Запустите приложение
-uvicorn main:app --host 0.0.0.0 --port 5000 --reload
 ```
 
-**Требования для локального запуска:**
-- Python 3.12+
-- Запущенный сервер MySQL
-- База данных и пользователь, настроенные согласно переменным окружения
+#!/usr/bin/env bash
+set -eo pipefail
 
-## Настройка базы данных MySQL
+if [ -f /opt/app/.env ]; then
+    export $(grep -v '^#' /opt/app/.env | xargs)
+fi
 
-```sql
-CREATE DATABASE example;
-CREATE USER 'app'@'localhost' IDENTIFIED BY 'very_strong';
-GRANT ALL PRIVILEGES ON example.* TO 'app'@'localhost';
-FLUSH PRIVILEGES;
+APP_DIR="/opt/app"
+BACKUP_DIR="/opt/backup"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="${BACKUP_DIR}/dump_${TIMESTAMP}.sql.gz"
+
+# Бэкап через mysql:8 (или schnitzler/mysqldump с --default-auth=mysql_native_password)
+sudo docker run --rm \
+  --network app_backend \
+  mysql:8 \
+  mysqldump -h app-db-1 -u root -p"${MYSQL_ROOT_PASSWORD}" virtd | gzip > "${BACKUP_FILE}"
+
+echo "Backup created successfully: ${BACKUP_FILE}"
+
 ```
 
-## Доступные эндпоинты
+• Cron-задача:
 
-- `GET /` - главная страница (записывает запрос в БД и возвращает время + IP)
-- `GET /requests` - просмотр всех записей из базы данных  
-- `GET /debug` - отладочная информация о заголовках запроса
-- `GET /docs` - автоматическая документация FastAPI (Swagger UI)
-
-## Переменные окружения
-
-| Переменная | Значение по умолчанию | Описание |
-|------------|----------------------|----------|
-| `DB_HOST` | `127.0.0.1` | Хост базы данных MySQL |
-| `DB_USER` | `app` | Пользователь БД |
-| `DB_PASSWORD` | `very_strong` | Пароль БД |
-| `DB_NAME` | `example` | Имя базы данных |
-
-## Проверка работы
-
-```bash
-# При правильной настройке через прокси
-curl http://localhost:8090
-
-# При прямом обращении (НЕПРАВИЛЬНО) 
-curl http://localhost:5000  
-# Получите подсказку о том, что нужно использовать порт 8090
 ```
 
-## Лицензия
+* * * * * /opt/backup.sh > /dev/null 2>&1
 
-Этот проект распространяется под лицензией MIT (подробности в файле `LICENSE`).
+```
+
+![img](img/scrn6.png)
+
+Задача 6: Извлечение бинарного файла Terraform
+Окно `dive hashicorp/terraform:latest` с выделенным файлом `terraform`.
+
+![img](img/scrn3.png)
+
+Терминал с выполнением команды `./terraform --version`.
+
+![img](img/scrn4.png)
